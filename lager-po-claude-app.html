@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Лагерь по Claude</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg: #F6F1E4;
+    --surface: #FFFEFA;
+    --ink: #262019;
+    --ink-soft: #7A6F5E;
+    --forest: #2F4B3C;
+    --forest-dark: #1C2E25;
+    --amber: #E0932E;
+    --mustard: #D9A441;
+    --line: #E7DFCC;
+    --danger: #B85C4A;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+
+  html, body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow-x:hidden;
+  }
+
+  #app{ min-height:100%; padding-top: calc(var(--safe-top) + 4px); padding-bottom: calc(var(--safe-bottom) + 32px); }
+
+  .topbar{ display:flex; align-items:center; gap:12px; padding: 14px 20px 6px 20px; }
+  .back-btn{
+    width:34px; height:34px; border-radius:10px; border:none; background: var(--surface);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: 0 1px 0 var(--line); cursor:pointer; flex-shrink:0;
+  }
+  .back-btn svg{width:18px;height:18px;stroke:var(--forest-dark);}
+  .back-btn.hidden{ visibility:hidden; }
+
+  .hero{ padding: 6px 20px 22px 20px; }
+  .hero-badge{
+    display:inline-flex; align-items:center; gap:6px;
+    background: var(--forest); color:#F2E9D4;
+    font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    padding:5px 10px; border-radius:999px;
+  }
+  .hero h1{ font-size: 26px; font-weight:800; letter-spacing:-0.02em; margin: 12px 0 4px 0; line-height:1.15; }
+  .hero p{ margin:0; color:var(--ink-soft); font-size:14.5px; line-height:1.4; max-width:32ch; }
+
+  .section-title{ padding: 4px 20px 10px 20px; }
+  .section-title h2{ font-size:19px; font-weight:800; letter-spacing:-0.01em; margin:0 0 3px 0; }
+  .section-title p{ margin:0; color:var(--ink-soft); font-size:13.5px; }
+
+  .tent-icon{ width:46px; height:38px; flex-shrink:0; }
+
+  .folder-list{ padding: 6px 16px 4px 16px; display:flex; flex-direction:column; gap:10px; }
+  .folder-card{
+    display:flex; align-items:center; gap:14px; background: var(--surface); border-radius:16px;
+    padding: 14px 16px; box-shadow: 0 1px 0 var(--line), 0 6px 16px -12px rgba(38,32,25,0.35);
+    cursor:pointer; border:1px solid var(--line); transition: transform .12s ease;
+  }
+  .folder-card:active{ transform: scale(0.98); }
+  .folder-card .meta{ flex:1; min-width:0; }
+  .folder-card .meta h3{ margin:0 0 3px 0; font-size:15.5px; font-weight:700; letter-spacing:-0.01em; }
+  .folder-card .meta span{ font-size:12.5px; color:var(--ink-soft); }
+  .folder-card .chev{ flex-shrink:0; opacity:.35; }
+  .folder-card .chev svg{ width:16px; height:16px; stroke:var(--ink); }
+
+  .count-pill{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:20px; height:20px; padding:0 6px;
+    background: var(--bg); border:1px solid var(--line);
+    border-radius:999px; font-size:11px; font-weight:700; color:var(--ink-soft);
+    margin-left:8px;
+  }
+
+  .subfolder{ background: var(--surface); border:1px solid var(--line); border-radius:16px; margin: 0 16px 12px 16px; overflow:hidden; }
+  .subfolder-head{ display:flex; align-items:center; gap:12px; padding: 14px 16px; cursor:pointer; }
+  .subfolder-head h4{ margin:0; font-size:14.5px; font-weight:700; flex:1; letter-spacing:-0.005em; }
+  .subfolder-head .chev svg{ width:14px; height:14px; stroke:var(--ink-soft); transition: transform .18s ease; }
+  .subfolder-head.open .chev svg{ transform: rotate(90deg); }
+
+  .file-rows{ display:none; border-top:1px solid var(--line); }
+  .file-rows.open{ display:block; }
+
+  .file-row{
+    display:flex; align-items:center; gap:12px; padding: 12px 16px; border-top: 1px solid var(--line);
+    text-decoration:none; color:var(--ink);
+    background:none; border-left:none; border-right:none; border-bottom:none;
+    width:100%; text-align:left; font-family:inherit; cursor:pointer;
+  }
+  .file-row:first-child{ border-top:none; }
+  .file-row:active{ background: var(--bg); }
+
+  .file-badge{
+    width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+    font-size:9.5px; font-weight:800; letter-spacing:.02em; color:#fff; flex-shrink:0;
+  }
+  .file-row .fname{ flex:1; font-size:13.5px; font-weight:600; line-height:1.3; }
+  .file-row .open-ico{ opacity:.4; flex-shrink:0; }
+  .file-row .open-ico svg{ width:15px; height:15px; stroke:var(--ink); }
+  .file-row .open-ico.spin svg{ animation: spin 0.9s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .empty{
+    margin: 8px 16px 4px 16px; background: var(--surface); border:1px dashed var(--line);
+    border-radius:16px; padding: 30px 22px; text-align:center;
+  }
+  .empty .tent-icon{ margin: 0 auto 14px auto; opacity:.5; }
+  .empty h4{ margin:0 0 6px 0; font-size:15px; font-weight:700; }
+  .empty p{ margin:0; font-size:13px; color:var(--ink-soft); line-height:1.5; }
+
+  .footer-note{ padding: 18px 24px 6px 24px; text-align:center; font-size:11.5px; color:var(--ink-soft); opacity:.7; }
+
+  .view{ display:none; }
+  .view.active{ display:block; animation: fadein .18s ease; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  .modal-backdrop{
+    position:fixed; inset:0; background: var(--bg);
+    display:none; align-items:stretch; justify-content:center; z-index:1000;
+  }
+  .modal-backdrop.open{ display:flex; }
+  .modal-sheet{
+    background: var(--forest-dark); width:100%; max-width:720px;
+    padding: calc(10px + var(--safe-top)) 10px calc(14px + var(--safe-bottom)) 10px;
+    height:100%; display:flex; flex-direction:column;
+  }
+  .modal-head{ display:flex; align-items:center; gap:8px; padding:6px 6px 12px 6px; flex-wrap:wrap; }
+  .modal-head .fname{ flex:1; color:#F2E9D4; font-size:14px; font-weight:700; min-width:100%; margin-bottom:4px; }
+  .modal-close{
+    width:34px; height:34px; border-radius:9px; border:none; background: rgba(255,255,255,0.1); color:#F2E9D4;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; margin-left:auto;
+  }
+  .modal-close svg{ width:17px; height:17px; stroke:#F2E9D4; }
+  .modal-body{ flex:1; min-height:0; border-radius:12px; overflow-y:auto; background:#000; display:flex; align-items:center; justify-content:center; }
+  .modal-body video{ width:100%; max-height:100%; display:block; }
+  .modal-body canvas{ width:100%; display:block; margin-bottom:10px; }
+  .modal-body.doc-mode{ background:#fff; display:block; padding:20px 16px; align-items:normal; justify-content:normal; }
+  .modal-body.pdf-mode{ background:#4a4a4a; display:block; padding:10px; align-items:normal; justify-content:normal; }
+  .docx-view{ color:#262019; font-size:16.5px; line-height:1.7; }
+  .docx-view h1, .docx-view h2, .docx-view h3{ color:#262019; }
+  .xlsx-view{ overflow-x:auto; }
+  .xlsx-view table{ border-collapse:collapse; font-size:14px; color:#262019; }
+  .xlsx-view td, .xlsx-view th{ border:1px solid #ddd; padding:7px 10px; white-space:nowrap; }
+  .modal-msg{ color:#F2E9D4; font-size:13px; text-align:center; padding:26px 18px; line-height:1.5; }
+  .modal-msg a{ color:var(--mustard); }
+  .modal-actions{ display:flex; gap:8px; width:100%; }
+  .modal-download, .modal-open-disk{
+    display:inline-block; padding:9px 14px; border-radius:10px;
+    background: rgba(255,255,255,0.12); color:#F2E9D4; font-size:12.5px; font-weight:700;
+    text-decoration:none; text-align:center; flex:1;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .folder-card, .subfolder-head .chev svg, .view{ transition:none; animation:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <div class="view active" id="view-home">
+    <div class="topbar"><button class="back-btn hidden" aria-hidden="true"></button></div>
+    <div class="hero">
+      <span class="hero-badge">Лагерь по Claude</span>
+      <h1>Твой рюкзак с материалами</h1>
+      <p>Всё, что выдаётся на потоке - собрано в четырёх местах, открывай нужное</p>
+    </div>
+    <div class="folder-list" id="home-folder-list"></div>
+    <div class="footer-note">Материалы курса «ИИ на простом» - обновляются по ходу потока</div>
+  </div>
+
+  <div class="view" id="view-section">
+    <div class="topbar">
+      <button class="back-btn" id="btn-back-section">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+    </div>
+    <div class="section-title" id="section-title-block">
+      <h2 id="section-title-text"></h2>
+      <p id="section-subtitle-text"></p>
+    </div>
+    <div id="section-body"></div>
+  </div>
+
+</div>
+
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <div class="fname" id="modal-fname"></div>
+      <div class="modal-actions">
+        <a class="modal-open-disk" id="modal-open-disk" href="#" style="display:none;">Открыть на Диске</a>
+        <a class="modal-download" id="modal-download" href="#" download style="display:none;">Скачать</a>
+      </div>
+      <button class="modal-close" id="modal-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  if (window.pdfjsLib){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  var tg = window.Telegram ? window.Telegram.WebApp : null;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    try {
+      var tp = tg.themeParams || {};
+      var root = document.documentElement.style;
+      if (tp.bg_color) root.setProperty('--bg', tp.bg_color);
+      if (tp.secondary_bg_color) root.setProperty('--surface', tp.secondary_bg_color);
+      if (tp.text_color) root.setProperty('--ink', tp.text_color);
+      if (tp.hint_color) root.setProperty('--ink-soft', tp.hint_color);
+    } catch(e){}
+  }
+
+  // ---- твой сервер-посредник (server.py), который проверяет initData и отдаёт файл ----
+  var BACKEND_URL = "https://lager-proxy-server-production.up.railway.app";
+
+  var TYPE_COLORS = { pdf: "#B85C4A", video:"#2F4B3C", xlsx: "#3E7A55", docx: "#3E5C8A", link: "#8A6D3B" };
+  var TYPE_LABEL  = { pdf: "PDF", video: "MP4", xlsx: "XLS", docx: "DOC", link: "OPEN" };
+
+  // fileKey - должен точно совпадать с ключами FILES внутри server.py
+  var DATA = [
+    {
+      id: "predobuchenie",
+      title: "Предобучение",
+      subtitle: "Прочитать и посмотреть до старта потока",
+      color: "mustard",
+      folders: [
+        {
+          title: "Прочти это перед стартом!",
+          files: [
+            { name: "Гайд по Claude.pdf", type: "pdf", fileKey: "guide_pdf" },
+            { name: "Прочти это перед стартом!.docx", type: "docx", fileKey: "read_before_docx" }
+          ]
+        },
+        {
+          title: "Урок 1 - воркшопы по работе с Claude",
+          files: [
+            { name: "Библиотеки навыков для Claude.pdf", type: "pdf", fileKey: "l1_skills_lib_pdf" },
+            { name: "Воркшоп - ч.1 база работы с Claude.mp4", type: "video", fileKey: "l1_workshop1_mp4" },
+            { name: "Воркшоп - ч.2 - Claude code , Claude design.mp4", type: "video", fileKey: "l1_workshop2_mp4" },
+            { name: "Как оплатить нейросети и симкарты для работы-2.pdf", type: "pdf", fileKey: "l1_payments_pdf" },
+            { name: "Лучшие Skills для Claude - топ 10.pdf", type: "pdf", fileKey: "l1_top10_skills_pdf" }
+          ]
+        },
+        {
+          title: "Урок 2 - навыки в Claude",
+          files: [
+            { name: "Skills Claude маркетплейсы - курс.xlsx", type: "xlsx", fileKey: "l2_skills_table_xlsx" },
+            { name: "Библиотеки навыков для Claude.pdf", type: "pdf", fileKey: "l2_skills_lib_pdf" },
+            { name: "Инструкция по работе со Skills.pdf", type: "pdf", fileKey: "l2_instructions_pdf" },
+            { name: "ДЗ.docx", type: "docx", fileKey: "l2_homework_docx" },
+            { name: "Урок Skills в Claude.mp4", type: "video", fileKey: "l2_skills_lesson_mp4" }
+          ]
+        }
+      ]
+    },
+    {
+      id: "gifts",
+      title: "Подарки и бонусы",
+      subtitle: "Появятся по ходу потока",
+      color: "amber",
+      folders: [
+        {
+          title: "Полезные контакты",
+          files: [
+            { name: "@nmpstats - покупка готовых аккаунтов Claude и оплата своего", type: "link", url: "https://t.me/nmpstats" },
+            { name: "@WantToPayBot - оплата подписок на зарубежные ИИ-сервисы", type: "link", url: "https://t.me/WantToPayBot" },
+            { name: "@paymentserv_bot - ещё один бот для оплаты зарубежных сервисов", type: "link", url: "https://t.me/paymentserv_bot" },
+            { name: "@soyuzpai - бот для оплаты зарубежных сервисов и подписок", type: "link", url: "https://t.me/soyuzpai" },
+            { name: "ZabugorPay - сайт для оплаты зарубежных подписок", type: "link", url: "https://zabugorpay.ru/" }
+          ]
+        }
+      ],
+      emptyText: "Бонусы раздаются по ходу лагеря - как только откроется следующий, он появится здесь"
+    },
+    {
+      id: "recordings",
+      title: "Записи встреч",
+      subtitle: "Офлайн-выезд в Питере и созвоны",
+      color: "forest",
+      folders: [
+        {
+          title: "Организационная встреча",
+          files: [
+            { name: "Организационная встреча.mp4", type: "video", fileKey: "org_meeting_1_mp4" }
+          ]
+        }
+      ],
+      emptyText: "Запись каждой встречи выкладывается сюда в течение суток после эфира"
+    },
+    {
+      id: "trainers",
+      title: "Тренажёры",
+      subtitle: "Практика по работе с Claude",
+      color: "danger",
+      folders: [],
+      emptyText: "Первый тренажёр откроется после Урока 1 - жди здесь"
+    }
+  ];
+
+  function tentIcon(hex){
+    return '<svg class="tent-icon" viewBox="0 0 46 38" fill="none" xmlns="http://www.w3.org/2000/svg">'+
+      '<path d="M2 14 L23 2 L44 14" stroke="'+hex+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'+
+      '<rect x="3" y="13" width="40" height="21" rx="5" fill="'+hex+'"/>'+
+      '<path d="M23 13 L23 34" stroke="rgba(0,0,0,0.14)" stroke-width="2"/>'+
+      '</svg>';
+  }
+
+  var COLOR_MAP = { mustard: "var(--mustard)", amber: "var(--amber)", forest: "var(--forest)", danger: "var(--danger)" };
+
+  function totalFiles(section){
+    var n = 0;
+    section.folders.forEach(function(f){ n += f.files.length; });
+    return n;
+  }
+
+  var homeList = document.getElementById("home-folder-list");
+  DATA.forEach(function(section){
+    var hex = COLOR_MAP[section.color];
+    var count = totalFiles(section);
+    var card = document.createElement("div");
+    card.className = "folder-card";
+    card.innerHTML =
+      tentIcon(hex) +
+      '<div class="meta"><h3>'+section.title+(count ? '<span class="count-pill">'+count+'</span>' : '')+'</h3>'+
+      '<span>'+section.subtitle+'</span></div>'+
+      '<div class="chev"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>';
+    card.addEventListener("click", function(){ openSection(section); });
+    homeList.appendChild(card);
+  });
+
+  var viewHome = document.getElementById("view-home");
+  var viewSection = document.getElementById("view-section");
+  var sectionBody = document.getElementById("section-body");
+
+  function openSection(section){
+    document.getElementById("section-title-text").textContent = section.title;
+    document.getElementById("section-subtitle-text").textContent = section.subtitle;
+    sectionBody.innerHTML = "";
+
+    if (section.folders.length === 0){
+      var hex = COLOR_MAP[section.color];
+      var empty = document.createElement("div");
+      empty.className = "empty";
+      empty.innerHTML = tentIcon(hex) + '<h4>Здесь пока пусто</h4><p>'+section.emptyText+'</p>';
+      sectionBody.appendChild(empty);
+    } else {
+      section.folders.forEach(function(folder, idx){
+        var wrap = document.createElement("div");
+        wrap.className = "subfolder";
+
+        var head = document.createElement("div");
+        head.className = "subfolder-head";
+        head.innerHTML = '<h4>'+folder.title+'</h4><span class="count-pill">'+folder.files.length+'</span>'+
+          '<div class="chev"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>';
+
+        var rows = document.createElement("div");
+        rows.className = "file-rows";
+        if (idx === 0){ rows.classList.add("open"); head.classList.add("open"); }
+
+        folder.files.forEach(function(file){
+          var row = document.createElement("button");
+          row.type = "button";
+          row.className = "file-row";
+          var bg = TYPE_COLORS[file.type] || "#7A6F5E";
+          row.innerHTML =
+            '<div class="file-badge" style="background:'+bg+'">'+TYPE_LABEL[file.type]+'</div>'+
+            '<div class="fname">'+file.name+'</div>'+
+            '<div class="open-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></div>';
+          row.addEventListener("click", function(){ handleFileClick(file, row); });
+          rows.appendChild(row);
+        });
+
+        head.addEventListener("click", function(){
+          var isOpen = rows.classList.contains("open");
+          rows.classList.toggle("open", !isOpen);
+          head.classList.toggle("open", !isOpen);
+        });
+
+        wrap.appendChild(head);
+        wrap.appendChild(rows);
+        sectionBody.appendChild(wrap);
+      });
+    }
+
+    viewHome.classList.remove("active");
+    viewSection.classList.add("active");
+    if (tg && tg.BackButton){ tg.BackButton.show(); }
+  }
+
+  function goHome(){
+    viewSection.classList.remove("active");
+    viewHome.classList.add("active");
+    if (tg && tg.BackButton){ tg.BackButton.hide(); }
+  }
+
+  document.getElementById("btn-back-section").addEventListener("click", goHome);
+  if (tg && tg.BackButton){ tg.BackButton.onClick(goHome); }
+
+  var modalBackdrop = document.getElementById("modal-backdrop");
+  var modalBody = document.getElementById("modal-body");
+  var modalFname = document.getElementById("modal-fname");
+  var modalDownload = document.getElementById("modal-download");
+  var modalOpenDisk = document.getElementById("modal-open-disk");
+
+  function openModal(name){
+    modalFname.textContent = name;
+    modalBody.className = "modal-body";
+    modalBody.innerHTML = '<div class="modal-msg">Загружаю…</div>';
+    modalDownload.style.display = "none";
+    modalOpenDisk.style.display = "none";
+    modalBackdrop.classList.add("open");
+  }
+  function closeModal(){
+    modalBackdrop.classList.remove("open");
+    modalBody.innerHTML = "";
+  }
+  document.getElementById("modal-close").addEventListener("click", closeModal);
+  modalBackdrop.addEventListener("click", function(e){ if (e.target === modalBackdrop) closeModal(); });
+
+  function openOnDiskUrl(fileKey){
+    var initData = (tg && tg.initData) ? tg.initData : "";
+    return BACKEND_URL + "/api/open?key=" + encodeURIComponent(fileKey) + "&init_data=" + encodeURIComponent(initData);
+  }
+
+  function fetchFileBlob(fileKey){
+    var url = BACKEND_URL + "/api/file?key=" + encodeURIComponent(fileKey);
+    return fetch(url, {
+      headers: { "X-Telegram-Init-Data": (tg && tg.initData) ? tg.initData : "" }
+    }).then(function(res){
+      if (!res.ok) throw new Error("server status " + res.status);
+      return res.blob();
+    });
+  }
+
+  async function renderPdf(blob, container){
+    var buf = await blob.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    container.innerHTML = "";
+    var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    var baseScale = (container.clientWidth / 595) * 1.6 * dpr; // 595pt ~ ширина A4, увеличенный масштаб для читаемости
+    for (var pageNum = 1; pageNum <= pdf.numPages; pageNum++){
+      var page = await pdf.getPage(pageNum);
+      var viewport = page.getViewport({ scale: Math.max(baseScale, 1.8) });
+      var canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport: viewport }).promise;
+      container.appendChild(canvas);
+    }
+  }
+
+  async function renderDocx(blob, container){
+    var buf = await blob.arrayBuffer();
+    var result = await mammoth.convertToHtml({ arrayBuffer: buf });
+    container.innerHTML = '<div class="docx-view">' + result.value + '</div>';
+  }
+
+  async function renderXlsx(blob, container){
+    var buf = await blob.arrayBuffer();
+    var wb = XLSX.read(buf, { type: "array" });
+    var firstSheet = wb.SheetNames[0];
+    var html = XLSX.utils.sheet_to_html(wb.Sheets[firstSheet]);
+    container.innerHTML = '<div class="xlsx-view">' + html + '</div>';
+  }
+
+  function renderVideo(blob, container){
+    var url = URL.createObjectURL(blob);
+    container.innerHTML = "";
+    var v = document.createElement("video");
+    v.src = url; v.controls = true; v.playsInline = true; v.autoplay = true;
+    container.appendChild(v);
+  }
+
+  function handleFileClick(file, rowEl){
+    if (file.type === "link"){
+      if (tg && tg.openLink){ tg.openLink(file.url); } else { window.open(file.url, "_blank"); }
+      return;
+    }
+
+    var icoWrap = rowEl.querySelector(".open-ico");
+    icoWrap.classList.add("spin");
+
+    openModal(file.name);
+    if (file.type === "pdf"){ modalBody.classList.add("pdf-mode"); }
+    if (file.type === "docx" || file.type === "xlsx"){ modalBody.classList.add("doc-mode"); }
+
+    modalOpenDisk.href = openOnDiskUrl(file.fileKey);
+    modalOpenDisk.onclick = function(e){
+      e.preventDefault();
+      if (tg && tg.openLink){ tg.openLink(modalOpenDisk.href); } else { window.open(modalOpenDisk.href, "_blank"); }
+    };
+    modalOpenDisk.style.display = "inline-block";
+
+    if (file.type === "video"){
+      // видео через блоб грузится целиком и очень медленно - для видео сразу предлагаем
+      // открыть на Диске, там нативный плеер Яндекса с адаптивным качеством
+      icoWrap.classList.remove("spin");
+      modalBody.innerHTML = '<div class="modal-msg">Видео лучше смотреть на Диске - там свой плеер с быстрой загрузкой.<br>Жми "Открыть на Диске" выше, либо можно попробовать посмотреть прямо здесь, но это будет медленнее:</div>';
+      var tryBtn = document.createElement("button");
+      tryBtn.textContent = "Всё равно загрузить здесь";
+      tryBtn.style.cssText = "margin:14px auto 0 auto; display:block; padding:10px 16px; border-radius:10px; border:none; background:rgba(255,255,255,0.15); color:#F2E9D4; font-size:13px; font-weight:700;";
+      tryBtn.onclick = function(){
+        modalBody.innerHTML = '<div class="modal-msg">Загружаю…</div>';
+        fetchFileBlob(file.fileKey).then(function(blob){
+          renderVideo(blob, modalBody);
+          var blobUrl = URL.createObjectURL(blob);
+          modalDownload.href = blobUrl;
+          modalDownload.download = file.name;
+          modalDownload.style.display = "inline-block";
+        }).catch(function(){
+          modalBody.innerHTML = '<div class="modal-msg">Не получилось загрузить</div>';
+        });
+      };
+      modalBody.appendChild(tryBtn);
+      return;
+    }
+
+    fetchFileBlob(file.fileKey).then(async function(blob){
+      icoWrap.classList.remove("spin");
+
+      if (file.type === "pdf"){ await renderPdf(blob, modalBody); }
+      else if (file.type === "docx"){ await renderDocx(blob, modalBody); }
+      else if (file.type === "xlsx"){ await renderXlsx(blob, modalBody); }
+
+      var blobUrl = URL.createObjectURL(blob);
+      modalDownload.href = blobUrl;
+      modalDownload.download = file.name;
+      modalDownload.style.display = "inline-block";
+    }).catch(function(err){
+      icoWrap.classList.remove("spin");
+      modalBody.className = "modal-body";
+      modalBody.innerHTML = '<div class="modal-msg">Не получилось получить файл - проверь, что сервер запущен, или попробуй ещё раз через минуту</div>';
+    });
+  }
+})();
+</script>
+</body>
+</html>
